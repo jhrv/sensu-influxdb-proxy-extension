@@ -1,25 +1,21 @@
-sensu-influxdb-extension
-========================
+sensu-influxdb-proxy-extension
+==============================
 
-Sensu extension for sending metrics with graphite data-format to InfluxDB (>=0.9).
-
-For each sensu-event it receives, it will split the sensu-output into **measurements** and **points**  and extract tags
-defined on the sensu-client configuration into **tags**.
-
+Sensu extension for sending data to InfluxDB (ideally using the line protocol)
 This extension uses the InfluxDB REST-API directly.
 
 # Getting started
 
-1) Add the *sensu-influxdb-extension.rb* to the sensu extensions folder (/etc/sensu/extensions)
+1) Add the *sensu-influxdb-proxy-extension.rb* to the sensu extensions folder (/etc/sensu/extensions)
 
-2) Create your InfluxDB configuration for Sensu (or copy and edit *influxdb-extension.json.tmpl*) inside the sensu config folder (/etc/sensu/conf.d). 
+2) Create your InfluxDB configuration for Sensu (or copy and edit *influxdb-proxy-extension.json.tmpl*) inside the sensu config folder (/etc/sensu/conf.d). 
 
 ```
 {
-    "influxdb-extension": {
+    "influxdb-proxy-extension": {
         "hostname": "influxdb.mydomain.tld",
         "port": "8086",
-        "database": "metrics",
+        "database": "events",
         "username": "sensu",
         "password": "m3tr1c54l1f3"
     }
@@ -30,26 +26,31 @@ This extension uses the InfluxDB REST-API directly.
 
 ```
 "handlers": {
-    "metrics": {
+    "events": {
         "type": "set",
-        "handlers": [ "influxdb-extension" ]
+        "handlers": [ "influxdb-proxy-extension" ]
     }
     ...
  }
 
 ```
 
-4) Configure your metric/check-definitions to use this handler
+4) Send metrics from your application => socket @ localhost:3030
+
+Send metrics directly from your applications using the TCP-socket the sensu-client exposes on port 3030. The output you write to the socket must be valid Sensu JSON as described [here](https://sensuapp.org/docs/latest/clients#client-socket-input)
+
+Example payload:
 
 ```
-"checks": {
-    "metric_cpu": {
-        "type": "metric",
-        "command": "/etc/sensu/plugins/metrics/cpu-usage.rb",
-        "handlers": [ "metrics" ],
-        ...
- }
+{
+   "name": "my_application_event",
+   "output": "created_account,region=uswest value=1 1434055562000000000",
+   "handler": ["events"],
+   "status": 0
+}
 ```
+
+This will create the event "created_account" with the tag region=uswest and value 1 in InfluxDB. This can be anything that is valid to the [Line Protocol](https://influxdb.com/docs/v0.9/write_protocols/line.html)
 
 5)  Restart your sensu-server and sensu-client(s)
 
@@ -60,46 +61,3 @@ If you follow the sensu-server log (/var/log/sensu/sensu-server.log) you should 
 {"timestamp":"2015-06-21T13:37:04.256753+0200","level":"info","message":"influxdb-extension:
 Successfully initialized config: hostname: ....
 ```
-
-# sensu-events => InfluxDB concepts
-
-###sensu-client tags => influxdb tags
-
-```
-{
-    "client": {
-        "name": "app_env_hostname",
-        "address": "my-app-in-env.domain.tld",
-        "subscriptions": [],
-        "tags": {
-            "environment": "dev",
-            "application": "myapp",
-            "hostname": "my-app-in-env.domain.tld"
-        }
-    }
-}
-```
-
-... will turn into the following tags for the series: 'environment=dev,application=myapp,hostname=my-app-in-env.domain.tld'
-
-If no tags are defined on the client, it will by default create the tag hostname using the clients address.
-
-###sensu-output (graphite data-format) => measurements
-
-Graphite data-format = '[metric_path] [value] [timestamp]\n'
-
-Example output:
-
-```
-key_a 1337 1435216969
-key_b 6969 1435216969
-key_c 1234 1435216969
-```
-
-... will turn into the following payload written to the InfluxDB write endpoint
-
-```
-key_a,<tags> value=1337.0 1435216969000000000\nkey_b,<tags> value=6969.0 1435216969000000000\nkey_c,<tags> value=1234.0 1435216969000000000
-```
-
-Note that the timestamp has been converted to nanoseconds as this is assumed by InfluxDB unless otherwise specified. In addition all non-string values are converted to float.
