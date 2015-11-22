@@ -2,9 +2,12 @@
     "influxdb-extension": {
         "hostname": "influxdb.mydomain.tld",
         "port": "8086",
-        "database": "events",
-        "username": "sensu",
-        "password": "m3tr1c54l1f3"
+        "ssl": false,
+        "database": "<influxdb database name>",
+        "username": "<influxdb username>",
+        "password": "<influxdb password>",
+        "buffer_size": 100,
+        "precision": "s"
     }
 }
 
