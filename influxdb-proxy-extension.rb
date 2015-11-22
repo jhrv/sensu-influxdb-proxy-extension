@@ -77,9 +77,6 @@ module Sensu::Extension
             @buffer.push(point)
             @logger.debug("#{@@extension_name}: stored point in buffer (#{@buffer.length}/#{@BUFFER_SIZE})")
         end
-        
-        @buffer.push(point)
-        @logger.debug("#{@@extension_name}: stored point in buffer (#{@buffer.length}/#{@BUFFER_SIZE})")
       rescue => e
         @logger.error("#{@@extension_name}: unable to post payload to influxdb for event #{event} - #{e.backtrace.to_s}")
       end
