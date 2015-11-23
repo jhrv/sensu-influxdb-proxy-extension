@@ -5,7 +5,7 @@ require 'multi_json'
 
 module Sensu::Extension
   class InfluxDBProxy < Handler
-    
+
     @@extension_name = 'influxdb-proxy-extension'
 
     def name
@@ -16,11 +16,30 @@ module Sensu::Extension
       'Forwards metrics to InfluxDB'
     end
 
+    def run(event)
+      begin
+        if buffer_too_old? or buffer_too_big?
+          flush_buffer
+        end
+
+        event = MultiJson.load(event)
+        output = event[:check][:output]
+
+        output.split(/\r\n|\n/).each do |point|
+          @buffer.push(point)
+          @logger.debug("#{@@extension_name}: stored point in buffer (#{@buffer.length}/#{@BUFFER_SIZE})")
+        end
+      rescue => e
+        @logger.error("#{@@extension_name}: unable to post payload to influxdb for event #{event} - #{e.backtrace.to_s}")
+      end
+
+      yield("#{@@extension_name}: handler finished", 0)
+    end
+
     def post_init
       influxdb_config = settings[@@extension_name]
-      
       validate_config(influxdb_config)
-       
+      
       hostname         = influxdb_config[:hostname] 
       port             = influxdb_config[:port] || 8086
       database         = influxdb_config[:database]
@@ -33,14 +52,41 @@ module Sensu::Extension
       password         = influxdb_config[:password]
       auth_queryparam  = if username.nil? or password.nil? then "" else "&u=#{username}&p=#{password}" end
       @BUFFER_SIZE     = influxdb_config[:buffer_size] || 100
+      @BUFFER_MAX_AGE  = influxdb_config[:buffer_max_age] || 10
 
       @uri = URI("#{protocol}://#{hostname}:#{port}/write?db=#{database}&precision=#{precision}#{rp_queryparam}#{auth_queryparam}")
       @http = Net::HTTP::new(@uri.host, @uri.port)         
       @buffer = []
-
-      @logger.info("#{@@extension_name}: Successfully initialized config: hostname: #{hostname}, port: #{port}, database: #{database}, uri: #{@uri.to_s}, username: #{username}, buffer_size: #{@BUFFER_SIZE}")
+      @buffer_flushed = Time.now.to_i
+      
+      @logger.info("#{@@extension_name}: Successfully initialized config: hostname: #{hostname}, port: #{port}, database: #{database}, uri: #{@uri.to_s}, username: #{username}, buffer_size: #{@BUFFER_SIZE}, buffer_max_age: #{@BUFFER_MAX_AGE}")
     end
     
+    def send_to_influxdb(payload)
+      request = Net::HTTP::Post.new(@uri.request_uri)
+      request.body = payload 
+      
+      @logger.debug("#{@@extension_name}: writing payload #{payload} to endpoint #{@uri.to_s}")
+      response = @http.request(request)
+      @logger.debug("#{@@extension_name}: influxdb http response code = #{response.code}, body = #{response.body}")
+    end
+    
+    def flush_buffer
+      payload = @buffer.join("\n")
+      send_to_influxdb(payload)
+      @buffer = []
+      @buffer_flushed = Time.now.to_i
+    end
+
+    def buffer_too_old?
+      buffer_age = Time.now.to_i - @buffer_flushed
+      buffer_age >= @BUFFER_MAX_AGE
+    end 
+    
+    def buffer_too_big?
+      @buffer.length >= @BUFFER_SIZE
+    end 
+
     def validate_config(config)
       if config.nil?
         raise ArgumentError, "No configuration for #{@@extension_name} provided. Exiting..."
@@ -51,37 +97,6 @@ module Sensu::Extension
           raise ArgumentError, "Required setting #{required_setting} not provided to extension. This should be provided as JSON element with key '#{@@extension_name}'. Exiting..."
         end
       end
-    end
-
-    def send_to_influxdb(payload)
-        request = Net::HTTP::Post.new(@uri.request_uri)
-        request.body = payload 
-        
-        @logger.debug("#{@@extension_name}: writing payload #{payload} to endpoint #{@uri.to_s}")
-        response = @http.request(request)
-        @logger.debug("#{@@extension_name}: influxdb http response code = #{response.code}, body = #{response.body}")
-    end
-    
-    def run(event)
-      begin
-        event = MultiJson.load(event)
-        output = event[:check][:output]
-
-        output.split(/\r\n|\n/).each do |point|
-            if @buffer.length >= @BUFFER_SIZE
-                payload = @buffer.join("\n")
-                send_to_influxdb(payload)
-                @buffer = []
-            end
-
-            @buffer.push(point)
-            @logger.debug("#{@@extension_name}: stored point in buffer (#{@buffer.length}/#{@BUFFER_SIZE})")
-        end
-      rescue => e
-        @logger.error("#{@@extension_name}: unable to post payload to influxdb for event #{event} - #{e.backtrace.to_s}")
-      end
-
-      yield("#{@@extension_name}: handler finished", 0)
     end
   end
 end
