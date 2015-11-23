@@ -74,7 +74,7 @@ Depending on your load, you will want to tune these configurations to match your
 Example:
 If you set the **buffer_size** to 1000, and you have a event-frequency of 100 per second, it will give you about a ten second lag before the data is available through the InfluxDB query API.
 
-buffer_size / event-frequency = latency 
+**buffer_size** / event-frequency = latency 
 
 However, if you set the **buffer_max_age** to 5 seconds, it will flush the buffer each time it exeeds this limit.
 
