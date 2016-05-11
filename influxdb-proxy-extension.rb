@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'net/http'
-require 'multi_json'
+require 'json'
 
 module Sensu::Extension
   class InfluxDBProxy < Handler
@@ -22,8 +22,8 @@ module Sensu::Extension
           flush_buffer
         end
 
-        event = MultiJson.load(event)
-        output = event[:check][:output]
+        event = JSON.parse(event)
+        output = event['check']['output']
 
         output.split(/\r\n|\n/).each do |point|
           @buffer.push(point)
@@ -40,19 +40,19 @@ module Sensu::Extension
       influxdb_config = settings[@@extension_name]
       validate_config(influxdb_config)
       
-      hostname         = influxdb_config[:hostname] 
-      port             = influxdb_config[:port] || 8086
-      database         = influxdb_config[:database]
-      ssl              = influxdb_config[:ssl] || false
-      precision        = influxdb_config[:precision] || 's'
-      retention_policy = influxdb_config[:retention_policy]
+      hostname         = influxdb_config['hostname'] 
+      port             = influxdb_config['port'] || 8086
+      database         = influxdb_config['database']
+      ssl              = influxdb_config['ssl'] || false
+      precision        = influxdb_config['precision'] || 's'
+      retention_policy = influxdb_config['retention_policy']
       rp_queryparam    = if retention_policy.nil? then "" else "&rp=#{retention_policy}" end
       protocol         = if ssl then 'https' else 'http' end 
-      username         = influxdb_config[:username]
-      password         = influxdb_config[:password]
+      username         = influxdb_config['username']
+      password         = influxdb_config['password']
       auth_queryparam  = if username.nil? or password.nil? then "" else "&u=#{username}&p=#{password}" end
-      @BUFFER_SIZE     = influxdb_config[:buffer_size] || 100
-      @BUFFER_MAX_AGE  = influxdb_config[:buffer_max_age] || 10
+      @BUFFER_SIZE     = influxdb_config['buffer_size'] || 100
+      @BUFFER_MAX_AGE  = influxdb_config['buffer_max_age'] || 10
 
       @uri = URI("#{protocol}://#{hostname}:#{port}/write?db=#{database}&precision=#{precision}#{rp_queryparam}#{auth_queryparam}")
       @http = Net::HTTP::new(@uri.host, @uri.port)         
