@@ -1,19 +1,19 @@
 #!/usr/bin/env ruby
 
-require 'net/http'
-require 'json'
+require "net/http"
+require "json"
 
 module Sensu::Extension
   class InfluxDBProxy < Handler
 
-    @@extension_name = 'influxdb-proxy-extension'
+    @@extension_name = "influxdb-proxy-extension"
 
     def name
       @@extension_name
     end
 
     def description
-      'Forwards metrics to InfluxDB'
+      "Forwards metrics to InfluxDB"
     end
 
     def run(event)
@@ -23,7 +23,7 @@ module Sensu::Extension
         end
 
         event = JSON.parse(event)
-        output = event['check']['output']
+        output = event["check"]["output"]
 
         output.split(/\r\n|\n/).each do |point|
           @buffer.push(point)
@@ -38,19 +38,19 @@ module Sensu::Extension
       influxdb_config = settings[@@extension_name]
       validate_config(influxdb_config)
       
-      hostname         = influxdb_config['hostname'] 
-      port             = influxdb_config['port'] || 8086
-      database         = influxdb_config['database']
-      ssl              = influxdb_config['ssl'] || false
-      precision        = influxdb_config['precision'] || 's'
-      retention_policy = influxdb_config['retention_policy']
+      hostname         = influxdb_config[:hostname]
+      port             = influxdb_config[:port] || "8086"
+      database         = influxdb_config[:database]
+      ssl              = influxdb_config[:ssl] || false
+      precision        = influxdb_config[:precision] || "s"
+      retention_policy = influxdb_config[:retention_policy]
       rp_queryparam    = if retention_policy.nil? then "" else "&rp=#{retention_policy}" end
-      protocol         = if ssl then 'https' else 'http' end 
-      username         = influxdb_config['username']
-      password         = influxdb_config['password']
+      protocol         = if ssl then "https" else "http" end 
+      username         = influxdb_config[:username]
+      password         = influxdb_config[:password]
       auth_queryparam  = if username.nil? or password.nil? then "" else "&u=#{username}&p=#{password}" end
-      @BUFFER_SIZE     = influxdb_config.key?('buffer_size') ? influxdb_config['buffer_size'].to_i :  100
-      @BUFFER_MAX_AGE  = influxdb_config.key?('buffer_max_age') ? influxdb_config['buffer_max_age'].to_i : 10
+      @BUFFER_SIZE     = if influxdb_config.key?(:buffer_size) then influxdb_config[:buffer_size].to_i else 100 end
+      @BUFFER_MAX_AGE  = if influxdb_config.key?(:buffer_max_age) then influxdb_config[:buffer_max_age].to_i else 10 end
 
       @uri = URI("#{protocol}://#{hostname}:#{port}/write?db=#{database}&precision=#{precision}#{rp_queryparam}#{auth_queryparam}")
       @http = Net::HTTP::new(@uri.host, @uri.port)         
@@ -92,7 +92,7 @@ module Sensu::Extension
 
       ["hostname", "database"].each do |required_setting| 
         if config[required_setting].nil? 
-          raise ArgumentError, "Required setting #{required_setting} not provided to extension. This should be provided as JSON element with key '#{@@extension_name}'. Exiting..."
+          raise ArgumentError, "Required setting #{required_setting} not provided to extension. This should be provided as JSON element with key "#{@@extension_name}". Exiting..."
         end
       end
     end
